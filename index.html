@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown Diff 对比工具</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card-bg: #ffffff;
+    --border: #e0e0e0;
+    --text: #1a1a1a;
+    --text-muted: #888;
+    --header-bg: #2c3e50;
+
+    /* Diff colors — matching the reference image exactly */
+    --del-bg: #fce8e6;        /* light red — whole paragraph bg */
+    --del-hl: #f5a9a3;        /* dark red — specific diff words */
+    --del-text: #1a1a1a;
+
+    --add-bg: #d9f4dc;        /* light green — whole paragraph bg */
+    --add-hl: #6ccf78;        /* dark green — specific diff words */
+    --add-text: #1a1a1a;
+
+    --line-num-bg: #f8f8f8;
+    --line-num-text: #b0b0b0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* ===== Header ===== */
+  .header {
+    background: var(--header-bg);
+    color: #fff;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header h1 { font-size: 18px; font-weight: 600; letter-spacing: .3px; }
+  .header .hint { font-size: 12px; opacity: .7; margin-top: 2px; }
+
+  /* ===== Landing / Paste zone ===== */
+  .landing {
+    max-width: 900px;
+    margin: 60px auto;
+    text-align: center;
+    padding: 0 20px;
+  }
+  .landing h2 { font-size: 22px; margin-bottom: 8px; color: var(--text); }
+  .landing p { color: var(--text-muted); font-size: 14px; margin-bottom: 30px; line-height: 1.8; }
+
+  .paste-zone {
+    border: 2px dashed #c0c8d0;
+    border-radius: 16px;
+    padding: 60px 40px;
+    background: var(--card-bg);
+    cursor: pointer;
+    transition: all .25s;
+    position: relative;
+  }
+  .paste-zone:hover, .paste-zone.drag-over {
+    border-color: #4a90d9;
+    background: #f0f6ff;
+  }
+  .paste-zone .icon { font-size: 48px; margin-bottom: 12px; }
+  .paste-zone .main-text { font-size: 16px; font-weight: 600; color: var(--text); }
+  .paste-zone .sub-text { font-size: 13px; color: var(--text-muted); margin-top: 8px; }
+  .paste-zone .kbd {
+    display: inline-block;
+    background: #eee;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 12px;
+    font-family: monospace;
+    margin: 0 2px;
+  }
+
+  .or-divider { color: var(--text-muted); font-size: 13px; margin: 20px 0; }
+
+  .manual-toggle {
+    display: inline-block;
+    background: none;
+    border: 1px solid var(--border);
+    padding: 8px 20px;
+    border-radius: 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all .2s;
+  }
+  .manual-toggle:hover { border-color: #4a90d9; color: #4a90d9; }
+
+  /* ===== Manual input ===== */
+  .manual-input {
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 0 20px;
+    display: none;
+  }
+  .manual-input.show { display: block; }
+  .manual-input .input-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .manual-input .panel {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .manual-input .panel-head {
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--line-num-bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .manual-input textarea {
+    width: 100%;
+    height: 260px;
+    border: none;
+    outline: none;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.65;
+    resize: vertical;
+    font-family: inherit;
+  }
+  .manual-input .btn-row { text-align: center; }
+  .compare-btn {
+    background: var(--header-bg);
+    color: #fff;
+    border: none;
+    padding: 10px 36px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .compare-btn:hover { opacity: .9; transform: translateY(-1px); }
+
+  /* ===== Diff result ===== */
+  .diff-result {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 16px 20px;
+    display: none;
+  }
+  .diff-result.show { display: block; }
+
+  .result-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .result-toolbar .stats {
+    display: flex;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .stats .dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: -1px;
+  }
+  .stats .dot.del { background: #e57373; }
+  .stats .dot.add { background: #66bb6a; }
+  .stats .dot.eq { background: #bbb; }
+
+  .back-btn {
+    background: none;
+    border: 1px solid var(--border);
+    padding: 6px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .back-btn:hover { border-color: #4a90d9; color: #4a90d9; }
+
+  /* ===== Side-by-side aligned container ===== */
+  .sbs-container {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .sbs-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-bottom: 1px solid var(--border);
+  }
+  .sbs-header .panel-label {
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--line-num-bg);
+  }
+  .sbs-header .panel-label:first-child {
+    border-right: 1px solid var(--border);
+  }
+
+  .sbs-scroll {
+    max-height: 85vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* Each aligned row is a pair of left+right blocks at the same height */
+  .sbs-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .sbs-row:last-child { border-bottom: none; }
+
+  .sbs-cell {
+    display: flex;
+    min-height: 28px;
+    /* key: both cells in the same row stretch to the taller one */
+  }
+  .sbs-cell:first-child {
+    border-right: 1px solid var(--border);
+  }
+  .sbs-cell .cell-num {
+    flex-shrink: 0;
+    width: 44px;
+    text-align: right;
+    color: var(--line-num-text);
+    background: var(--line-num-bg);
+    border-right: 1px solid var(--border);
+    font-size: 11px;
+    padding: 3px 8px 3px 4px;
+    line-height: 1.7;
+    user-select: none;
+  }
+  .sbs-cell .cell-content {
+    flex: 1;
+    padding: 3px 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  /* Colors */
+  .sbs-cell.cell-del { background: var(--del-bg); }
+  .sbs-cell.cell-del .cell-num { background: #f8d0cc; }
+
+  .sbs-cell.cell-add { background: var(--add-bg); }
+  .sbs-cell.cell-add .cell-num { background: #b8e6bf; }
+
+  .sbs-cell.cell-eq { background: #fff; }
+
+  .sbs-cell.cell-empty { background: #fafafa; }
+  .sbs-cell.cell-empty .cell-num { background: #f2f2f2; }
+
+  /* Word-level highlights */
+  .hl-del {
+    background: var(--del-hl);
+    border-radius: 3px;
+    padding: 1px 1px;
+  }
+  .hl-add {
+    background: var(--add-hl);
+    border-radius: 3px;
+    padding: 1px 1px;
+  }
+
+  /* No diff */
+  .no-diff {
+    text-align: center;
+    padding: 50px;
+    color: #66bb6a;
+    font-size: 16px;
+  }
+  .no-diff .big { font-size: 40px; margin-bottom: 8px; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: #333;
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 13px;
+    opacity: 0;
+    transition: all .3s;
+    pointer-events: none;
+    z-index: 999;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .url-banner {
+    max-width: 1600px;
+    margin: 12px auto 0;
+    padding: 10px 20px;
+    background: #e8f5e9;
+    border: 1px solid #c8e6c9;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #2e7d32;
+    display: none;
+  }
+  .url-banner.show { display: block; }
+
+  .hidden { display: none !important; }
+
+  @media (max-width: 768px) {
+    .sbs-header { grid-template-columns: 1fr; }
+    .sbs-row { grid-template-columns: 1fr; }
+    .sbs-cell:first-child { border-right: none; border-bottom: 1px solid var(--border); }
+    .manual-input .input-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>📝 Markdown Diff 对比工具</h1>
+    <div class="hint">从 Excel 复制两个单元格，直接粘贴即可对比</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="url-banner" id="url-banner">🔗 已通过 URL 参数加载数据，自动对比。</div>
+
+<!-- Landing page -->
+<div class="landing" id="landing">
+  <h2>粘贴 Excel 单元格，即时查看 Diff</h2>
+  <p>
+    在 Excel 中选中两个单元格（旧版 + 新版），<kbd>Ctrl+C</kbd> 复制后，在此页面 <kbd>Ctrl+V</kbd> 粘贴<br>
+    工具会自动识别 Tab 分隔的两列数据并进行对比
+  </p>
+  <div class="paste-zone" id="paste-zone" tabindex="0">
+    <div class="icon">📋</div>
+    <div class="main-text">在此页面任意位置按 <span class="kbd">Ctrl</span>+<span class="kbd">V</span> 粘贴</div>
+    <div class="sub-text">支持从 Excel / WPS 复制两个单元格（Tab 分隔），也可粘贴纯文本</div>
+  </div>
+  <div class="or-divider">—— 或者 ——</div>
+  <button class="manual-toggle" onclick="showManualInput()">手动输入两段文本进行对比</button>
+</div>
+
+<!-- Manual input -->
+<div class="manual-input" id="manual-input">
+  <div class="input-grid">
+    <div class="panel">
+      <div class="panel-head">📄 原始版本（Old）</div>
+      <textarea id="text-old" placeholder="粘贴原始 Markdown 内容..."></textarea>
+    </div>
+    <div class="panel">
+      <div class="panel-head">📄 新版本（New）</div>
+      <textarea id="text-new" placeholder="粘贴修改后 Markdown 内容..."></textarea>
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="compare-btn" onclick="runManualCompare()">🔍 对比</button>
+  </div>
+</div>
+
+<!-- Diff result -->
+<div class="diff-result" id="diff-result">
+  <div class="result-toolbar">
+    <div class="stats" id="stats"></div>
+    <button class="back-btn" onclick="goBack()">← 重新对比</button>
+  </div>
+  <div id="diff-output"></div>
+</div>
+
+<script>
+// ===================== Utilities =====================
+
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function hl(s, type) {
+  return '<span class="hl-' + type + '">' + esc(s) + '</span>';
+}
+
+// ===================== Tokenizer =====================
+
+/**
+ * Tokenizer: split into individual CJK characters and Latin word/whitespace groups.
+ */
+function tokenize(str) {
+  const result = [];
+  const re = /[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\u2000-\u206f]|[a-zA-Z0-9]+|\s+|[^\s\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\u2000-\u206f]+/g;
+  let m;
+  while ((m = re.exec(str)) !== null) {
+    result.push(m[0]);
+  }
+  return result;
+}
+
+// ===================== LCS Helper =====================
+
+/**
+ * Generic LCS diff on arrays of items.
+ * Returns array of {type: 'eq'|'del'|'add', oldIdx, newIdx, value}.
+ */
+function lcs(oldArr, newArr, eq) {
+  if (!eq) eq = (a, b) => a === b;
+  const m = oldArr.length, n = newArr.length;
+  // Use standard DP — for paragraph counts this is always small
+  const dp = [];
+  for (let i = 0; i <= m; i++) {
+    dp[i] = new Array(n + 1).fill(0);
+  }
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = eq(oldArr[i-1], newArr[j-1])
+        ? dp[i-1][j-1] + 1
+        : Math.max(dp[i-1][j], dp[i][j-1]);
+    }
+  }
+
+  const result = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && eq(oldArr[i-1], newArr[j-1])) {
+      result.push({type: 'eq', oldIdx: i-1, newIdx: j-1, value: oldArr[i-1]});
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      result.push({type: 'add', oldIdx: null, newIdx: j-1, value: newArr[j-1]});
+      j--;
+    } else {
+      result.push({type: 'del', oldIdx: i-1, newIdx: null, value: oldArr[i-1]});
+      i--;
+    }
+  }
+  result.reverse();
+  return result;
+}
+
+// ===================== Paragraph Splitting =====================
+
+/**
+ * Split markdown into paragraphs.
+ * A paragraph boundary is one or more blank lines (lines containing only whitespace).
+ * This preserves markdown structure: headings, list blocks, text blocks stay together.
+ */
+function splitParagraphs(text) {
+  const lines = text.split('\n');
+  const paragraphs = [];
+  let current = [];
+
+  for (const line of lines) {
+    if (line.trim() === '') {
+      if (current.length > 0) {
+        paragraphs.push(current.join('\n'));
+        current = [];
+      }
+      // Keep blank line as a separator paragraph to maintain line numbering
+      paragraphs.push('');
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.length > 0) {
+    paragraphs.push(current.join('\n'));
+  }
+  return paragraphs;
+}
+
+/**
+ * Normalize a paragraph for comparison purposes.
+ * Trim whitespace so minor formatting differences don't cause mismatches.
+ */
+function normPara(p) {
+  return p.trim().replace(/\s+/g, ' ');
+}
+
+// ===================== Inline Diff =====================
+
+/**
+ * Fine-grained token-level diff for inline highlighting.
+ */
+function diffInline(oldStr, newStr) {
+  const oldToks = tokenize(oldStr);
+  const newToks = tokenize(newStr);
+
+  if (oldToks.length === 0 && newToks.length === 0) return {oldHtml: '', newHtml: ''};
+  if (oldToks.length === 0) return {oldHtml: '', newHtml: hl(newStr, 'add')};
+  if (newToks.length === 0) return {oldHtml: hl(oldStr, 'del'), newHtml: ''};
+
+  const ops = lcs(oldToks, newToks);
+
+  let oldHtml = '', newHtml = '';
+  let delBuf = '', addBuf = '';
+
+  function flushDel() {
+    if (delBuf) { oldHtml += hl(delBuf, 'del'); delBuf = ''; }
+  }
+  function flushAdd() {
+    if (addBuf) { newHtml += hl(addBuf, 'add'); addBuf = ''; }
+  }
+
+  for (const op of ops) {
+    if (op.type === 'eq') {
+      flushDel();
+      flushAdd();
+      oldHtml += esc(op.value);
+      newHtml += esc(op.value);
+    } else if (op.type === 'del') {
+      delBuf += op.value;
+    } else {
+      addBuf += op.value;
+    }
+  }
+  flushDel();
+  flushAdd();
+
+  return {oldHtml, newHtml};
+}
+
+// ===================== Paragraph-level Diff =====================
+
+/**
+ * Diff at paragraph level, then within each changed paragraph do line+word diff.
+ * Returns aligned row pairs for rendering.
+ */
+function diffParagraphs(oldText, newText) {
+  const oldParas = splitParagraphs(oldText);
+  const newParas = splitParagraphs(newText);
+
+  // LCS on paragraphs — use normalized comparison with a similarity threshold
+  // for modified paragraphs (not strictly equal but similar enough to pair)
+  const paraDiff = lcs(oldParas, newParas, (a, b) => normPara(a) === normPara(b));
+
+  // Now build aligned pairs.
+  // For 'eq' paragraphs: lines match 1:1
+  // For del/add blocks: we try to pair them by similarity, then do line-level diff within each pair
+
+  const alignedRows = []; // {leftLines: [{num, type, html}], rightLines: [{num, type, html}]}
+
+  let oldLineNum = 0, newLineNum = 0;
+
+  let idx = 0;
+  while (idx < paraDiff.length) {
+    const op = paraDiff[idx];
+
+    if (op.type === 'eq') {
+      // Paragraph is the same — render each line as equal
+      const lines = op.value.split('\n');
+      const leftLines = [], rightLines = [];
+      for (const line of lines) {
+        oldLineNum++; newLineNum++;
+        leftLines.push({num: oldLineNum, type: 'eq', html: esc(line)});
+        rightLines.push({num: newLineNum, type: 'eq', html: esc(line)});
+      }
+      alignedRows.push({leftLines, rightLines});
+      idx++;
+    } else {
+      // Collect consecutive del+add blocks for pairing
+      const delParas = [], addParas = [];
+      while (idx < paraDiff.length && paraDiff[idx].type === 'del') {
+        delParas.push(paraDiff[idx].value);
+        idx++;
+      }
+      while (idx < paraDiff.length && paraDiff[idx].type === 'add') {
+        addParas.push(paraDiff[idx].value);
+        idx++;
+      }
+
+      // Try to pair del/add paragraphs by similarity
+      const paired = pairParagraphs(delParas, addParas);
+
+      for (const pair of paired) {
+        if (pair.type === 'pair') {
+          // Both sides exist — do line-level diff within the paragraph pair
+          const pairResult = diffWithinParagraph(pair.old, pair.new, oldLineNum, newLineNum);
+          alignedRows.push({leftLines: pairResult.leftLines, rightLines: pairResult.rightLines});
+          oldLineNum = pairResult.oldLineNum;
+          newLineNum = pairResult.newLineNum;
+        } else if (pair.type === 'del') {
+          // Only left side
+          const lines = pair.value.split('\n');
+          const leftLines = [], rightLines = [];
+          for (const line of lines) {
+            oldLineNum++;
+            leftLines.push({num: oldLineNum, type: 'del', html: esc(line)});
+            rightLines.push({num: null, type: 'empty', html: ''});
+          }
+          alignedRows.push({leftLines, rightLines});
+        } else {
+          // Only right side
+          const lines = pair.value.split('\n');
+          const leftLines = [], rightLines = [];
+          for (const line of lines) {
+            newLineNum++;
+            leftLines.push({num: null, type: 'empty', html: ''});
+            rightLines.push({num: newLineNum, type: 'add', html: esc(line)});
+          }
+          alignedRows.push({leftLines, rightLines});
+        }
+      }
+    }
+  }
+
+  return {alignedRows, oldLineCount: oldLineNum, newLineCount: newLineNum};
+}
+
+/**
+ * Pair del and add paragraphs by similarity.
+ * Uses a simple greedy approach: for each del paragraph, find the most similar add paragraph.
+ */
+function pairParagraphs(delParas, addParas) {
+  if (delParas.length === 0 && addParas.length === 0) return [];
+  if (delParas.length === 0) return addParas.map(p => ({type: 'add', value: p}));
+  if (addParas.length === 0) return delParas.map(p => ({type: 'del', value: p}));
+
+  // Similarity: ratio of common tokens
+  function similarity(a, b) {
+    if (a.trim() === '' && b.trim() === '') return 1;
+    if (a.trim() === '' || b.trim() === '') return 0;
+    const ta = new Set(tokenize(normPara(a)));
+    const tb = new Set(tokenize(normPara(b)));
+    if (ta.size === 0 && tb.size === 0) return 1;
+    let common = 0;
+    for (const t of ta) { if (tb.has(t)) common++; }
+    return common / Math.max(ta.size, tb.size);
+  }
+
+  const result = [];
+  const usedAdd = new Set();
+
+  // For each del para, find best matching add para (if similarity > threshold)
+  const delMatches = [];
+  for (let di = 0; di < delParas.length; di++) {
+    let bestSim = 0, bestIdx = -1;
+    for (let ai = 0; ai < addParas.length; ai++) {
+      if (usedAdd.has(ai)) continue;
+      const sim = similarity(delParas[di], addParas[ai]);
+      if (sim > bestSim) { bestSim = sim; bestIdx = ai; }
+    }
+    if (bestSim >= 0.3 && bestIdx >= 0) {
+      delMatches.push({di, ai: bestIdx, sim: bestSim});
+      usedAdd.add(bestIdx);
+    } else {
+      delMatches.push({di, ai: -1, sim: 0});
+    }
+  }
+
+  // Build output: interleave pairs and unmatched
+  // First, output paired and unmatched dels in order
+  let nextAddIdx = 0;
+  for (const m of delMatches) {
+    // Output any unmatched adds that come before this paired add
+    if (m.ai >= 0) {
+      while (nextAddIdx < m.ai) {
+        if (!usedAdd.has(nextAddIdx)) {
+          result.push({type: 'add', value: addParas[nextAddIdx]});
+        }
+        nextAddIdx++;
+      }
+      result.push({type: 'pair', old: delParas[m.di], new: addParas[m.ai]});
+      nextAddIdx = m.ai + 1;
+    } else {
+      result.push({type: 'del', value: delParas[m.di]});
+    }
+  }
+  // Remaining unmatched adds
+  for (let ai = nextAddIdx; ai < addParas.length; ai++) {
+    if (!usedAdd.has(ai)) {
+      result.push({type: 'add', value: addParas[ai]});
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Within a paired paragraph, do line-level LCS diff, then inline diff per line pair.
+ */
+function diffWithinParagraph(oldPara, newPara, startOldLine, startNewLine) {
+  const oldLines = oldPara.split('\n');
+  const newLines = newPara.split('\n');
+  const lineDiff = lcs(oldLines, newLines);
+
+  const leftLines = [], rightLines = [];
+  let oldNum = startOldLine, newNum = startNewLine;
+
+  let li = 0;
+  while (li < lineDiff.length) {
+    const d = lineDiff[li];
+
+    if (d.type === 'eq') {
+      oldNum++; newNum++;
+      // Even for "equal" lines within a changed paragraph, show them normally
+      leftLines.push({num: oldNum, type: 'eq', html: esc(d.value)});
+      rightLines.push({num: newNum, type: 'eq', html: esc(d.value)});
+      li++;
+    } else {
+      // Collect del + add block
+      const dels = [], adds = [];
+      while (li < lineDiff.length && lineDiff[li].type === 'del') {
+        dels.push(lineDiff[li].value);
+        li++;
+      }
+      while (li < lineDiff.length && lineDiff[li].type === 'add') {
+        adds.push(lineDiff[li].value);
+        li++;
+      }
+
+      const pairCount = Math.min(dels.length, adds.length);
+
+      // Paired lines: inline diff
+      for (let p = 0; p < pairCount; p++) {
+        oldNum++; newNum++;
+        const wd = diffInline(dels[p], adds[p]);
+        leftLines.push({num: oldNum, type: 'del', html: wd.oldHtml});
+        rightLines.push({num: newNum, type: 'add', html: wd.newHtml});
+      }
+
+      // Remaining unpaired dels
+      for (let p = pairCount; p < dels.length; p++) {
+        oldNum++;
+        leftLines.push({num: oldNum, type: 'del', html: esc(dels[p])});
+        rightLines.push({num: null, type: 'empty', html: ''});
+      }
+
+      // Remaining unpaired adds
+      for (let p = pairCount; p < adds.length; p++) {
+        newNum++;
+        leftLines.push({num: null, type: 'empty', html: ''});
+        rightLines.push({num: newNum, type: 'add', html: esc(adds[p])});
+      }
+    }
+  }
+
+  return {leftLines, rightLines, oldLineNum: oldNum, newLineNum: newNum};
+}
+
+// ===================== Rendering =====================
+
+function renderAligned(alignedRows) {
+  let html = '<div class="sbs-container">';
+  html += '<div class="sbs-header">';
+  html += '<div class="panel-label">📄 原始版本（Old）</div>';
+  html += '<div class="panel-label">📄 新版本（New）</div>';
+  html += '</div>';
+  html += '<div class="sbs-scroll" id="sbs-scroll">';
+
+  for (const block of alignedRows) {
+    const maxLines = Math.max(block.leftLines.length, block.rightLines.length);
+
+    for (let i = 0; i < maxLines; i++) {
+      const left = i < block.leftLines.length
+        ? block.leftLines[i]
+        : {num: null, type: 'empty', html: ''};
+      const right = i < block.rightLines.length
+        ? block.rightLines[i]
+        : {num: null, type: 'empty', html: ''};
+
+      html += '<div class="sbs-row">';
+
+      // Left cell
+      html += '<div class="sbs-cell cell-' + left.type + '">';
+      html += '<div class="cell-num">' + (left.num !== null ? left.num : '') + '</div>';
+      html += '<div class="cell-content">' + left.html + '</div>';
+      html += '</div>';
+
+      // Right cell
+      html += '<div class="sbs-cell cell-' + right.type + '">';
+      html += '<div class="cell-num">' + (right.num !== null ? right.num : '') + '</div>';
+      html += '<div class="cell-content">' + right.html + '</div>';
+      html += '</div>';
+
+      html += '</div>';
+    }
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function showDiff(oldText, newText) {
+  const {alignedRows, oldLineCount, newLineCount} = diffParagraphs(oldText, newText);
+
+  // Stats
+  let adds = 0, dels = 0, eqs = 0;
+  for (const block of alignedRows) {
+    for (const l of block.leftLines) {
+      if (l.type === 'del') dels++;
+    }
+    for (const r of block.rightLines) {
+      if (r.type === 'add') adds++;
+      else if (r.type === 'eq') eqs++;
+    }
+  }
+
+  const statsEl = document.getElementById('stats');
+  statsEl.innerHTML =
+    '<span><span class="dot del"></span>' + dels + ' 行删除</span>' +
+    '<span><span class="dot add"></span>' + adds + ' 行新增</span>' +
+    '<span><span class="dot eq"></span>' + eqs + ' 行相同</span>';
+
+  const output = document.getElementById('diff-output');
+
+  if (adds === 0 && dels === 0) {
+    output.innerHTML = '<div class="no-diff"><div class="big">✅</div>两版内容完全相同，无差异。</div>';
+  } else {
+    output.innerHTML = renderAligned(alignedRows);
+  }
+
+  // Show result, hide landing
+  document.getElementById('landing').style.display = 'none';
+  document.getElementById('manual-input').classList.remove('show');
+  document.getElementById('diff-result').classList.add('show');
+}
+
+// ===================== Clipboard Handling =====================
+
+function parsePaste(text) {
+  const tabIdx = text.indexOf('\t');
+  if (tabIdx === -1) return null;
+
+  const lines = text.split(/\r?\n/);
+  const allHaveOneTab = lines.every(line => {
+    const tabs = (line.match(/\t/g) || []).length;
+    return tabs === 1 || line.trim() === '';
+  });
+
+  if (allHaveOneTab && lines.length > 1 && lines.some(l => l.includes('\t'))) {
+    let left = [], right = [];
+    for (const line of lines) {
+      if (line.includes('\t')) {
+        const [l, r] = line.split('\t', 2);
+        left.push(l);
+        right.push(r);
+      } else {
+        left.push(line);
+        right.push(line);
+      }
+    }
+    return {old: left.join('\n'), new: right.join('\n')};
+  }
+
+  return {old: text.substring(0, tabIdx), new: text.substring(tabIdx + 1)};
+}
+
+document.addEventListener('paste', function(e) {
+  if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (!text) return;
+
+  e.preventDefault();
+
+  const parsed = parsePaste(text);
+  if (parsed) {
+    showDiff(parsed.old, parsed.new);
+    showToast('✅ 已读取剪贴板数据并自动对比');
+  } else {
+    showManualInput();
+    document.getElementById('text-old').value = text;
+    document.getElementById('text-new').focus();
+    showToast('📋 已粘贴到"原始版本"，请再粘贴新版本');
+  }
+});
+
+// ===================== UI Helpers =====================
+
+function showManualInput() {
+  document.getElementById('landing').style.display = 'none';
+  document.getElementById('manual-input').classList.add('show');
+  document.getElementById('diff-result').classList.remove('show');
+  document.getElementById('text-old').focus();
+}
+
+function runManualCompare() {
+  const oldText = document.getElementById('text-old').value;
+  const newText = document.getElementById('text-new').value;
+  if (!oldText && !newText) {
+    showToast('⚠️ 请输入需要对比的内容');
+    return;
+  }
+  showDiff(oldText, newText);
+}
+
+function goBack() {
+  document.getElementById('diff-result').classList.remove('show');
+  document.getElementById('landing').style.display = '';
+  document.getElementById('manual-input').classList.remove('show');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ===================== URL Parameter Support =====================
+
+function init() {
+  const params = new URLSearchParams(window.location.search);
+  const oldText = params.get('old');
+  const newText = params.get('new');
+
+  if (oldText !== null || newText !== null) {
+    document.getElementById('url-banner').classList.add('show');
+    showDiff(oldText || '', newText || '');
+    return;
+  }
+
+  if (window.location.hash && window.location.hash.length > 1) {
+    try {
+      const data = JSON.parse(decodeURIComponent(window.location.hash.slice(1)));
+      if (data.old !== undefined || data.new !== undefined) {
+        document.getElementById('url-banner').classList.add('show');
+        showDiff(data.old || '', data.new || '');
+        return;
+      }
+    } catch(e) {}
+  }
+}
+
+document.getElementById('paste-zone').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') showManualInput();
+});
+
+init();
+</script>
+</body>
+</html>
