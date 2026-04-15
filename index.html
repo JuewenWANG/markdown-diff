@@ -930,73 +930,86 @@ function showDiff(oldText, newText) {
 
 // ===================== Clipboard Handling =====================
 
+/**
+ * Main paste parser — tries multiple strategies to extract 2-4 versions from clipboard text.
+ *
+ * Strategy order:
+ * 1. Quoted CSV (standard Excel with newlines in cells)
+ * 2. Row-aligned tabs (each line has same number of tabs → reconstruct columns)
+ * 3. Single-line tab split (simple cells, no newlines)
+ * 4. Fallback: split on first tab → 2 versions
+ */
 function parsePaste(text) {
-  // Excel copies multiple cells in a row as tab-separated values
-  // Each row is separated by \r\n or \n
-  // For multi-cell single-row paste: "cell1\tcell2\tcell3\tcell4"
-  // For multi-line cells, Excel wraps cell content in quotes: "\"line1\nline2\"\t\"line3\nline4\""
+  if (!text || text.indexOf('\t') === -1) return null;
 
-  // First, try to parse as quoted CSV-style tab-separated (handles newlines within cells)
-  const cells = parseExcelCells(text);
-
-  if (cells && cells.length >= 2 && cells.length <= 4) {
-    return { versions: cells };
+  // === Strategy 1: Quoted CSV-style (handles newlines within cells) ===
+  const quotedCells = parseQuotedCells(text);
+  if (quotedCells && quotedCells.length >= 2 && quotedCells.length <= 4) {
+    return { versions: quotedCells };
   }
 
-  // Fallback: simple tab split (single-line cells)
-  const tabIdx = text.indexOf('\t');
-  if (tabIdx === -1) return null;
+  // Normalize for subsequent strategies
+  let norm = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  while (norm.endsWith('\n')) norm = norm.slice(0, -1);
 
-  // Check if it's multi-row with consistent tab structure (old behavior)
-  const lines = text.split(/\r?\n/);
-  const firstLineTabs = (lines[0].match(/\t/g) || []).length;
+  const lines = norm.split('\n');
 
-  if (firstLineTabs >= 1 && firstLineTabs <= 3) {
-    // Try to split by tabs — each tab boundary is a new cell
-    const parts = lines[0].split('\t');
-    if (parts.length >= 2 && parts.length <= 4) {
-      // Single row with multiple tabs
-      if (lines.length === 1 || (lines.length === 2 && lines[1].trim() === '')) {
-        return { versions: parts };
-      }
-    }
-
-    // Multi-row: each row has the same tab count, reconstruct columns
-    const allSame = lines.filter(l => l.trim() !== '').every(l => (l.match(/\t/g) || []).length === firstLineTabs);
-    if (allSame) {
-      const numCols = firstLineTabs + 1;
-      if (numCols >= 2 && numCols <= 4) {
+  // === Strategy 2: Row-aligned tabs → reconstruct columns ===
+  // Each content line has N tabs → N+1 columns; blank lines may have 0 or N tabs
+  const contentLines = lines.filter(l => l.trim() !== '');
+  if (contentLines.length > 0) {
+    const tabCounts = contentLines.map(l => (l.match(/\t/g) || []).length);
+    const expectedTabs = tabCounts[0];
+    if (expectedTabs >= 1 && expectedTabs <= 3) {
+      const consistent = tabCounts.every(tc => tc === expectedTabs);
+      if (consistent) {
+        const numCols = expectedTabs + 1;
         const cols = Array.from({length: numCols}, () => []);
         for (const line of lines) {
-          if (line.trim() === '' && cols[0].length > 0) {
-            // Preserve blank lines
+          if (line.trim() === '') {
+            // Blank line: add empty to every column to preserve paragraph breaks
             for (let c = 0; c < numCols; c++) cols[c].push('');
-            continue;
-          }
-          const parts = line.split('\t');
-          for (let c = 0; c < numCols; c++) {
-            cols[c].push(parts[c] || '');
+          } else {
+            const parts = line.split('\t');
+            for (let c = 0; c < numCols; c++) cols[c].push(parts[c] || '');
           }
         }
-        return { versions: cols.map(c => c.join('\n').replace(/\n+$/, '')) };
+        const versions = cols.map(c => c.join('\n').replace(/\n+$/, '').replace(/^\n+/, ''));
+        if (versions.some(v => v.trim() !== '')) {
+          return { versions };
+        }
       }
     }
   }
 
-  // Ultimate fallback: just split on first tab (2 versions)
-  return { versions: [text.substring(0, tabIdx), text.substring(tabIdx + 1)] };
+  // === Strategy 3: Single-line with tabs (no newlines in cells) ===
+  if (lines.length === 1 || (lines.length === 2 && lines[1].trim() === '')) {
+    const parts = lines[0].split('\t');
+    if (parts.length >= 2 && parts.length <= 4) {
+      return { versions: parts };
+    }
+  }
+
+  // === Strategy 4: Fallback — split on first tab → 2 versions ===
+  const tabIdx = norm.indexOf('\t');
+  return { versions: [norm.substring(0, tabIdx), norm.substring(tabIdx + 1)] };
 }
 
 /**
- * Parse Excel-style tab-separated cells that may contain quoted values with newlines.
- * Excel wraps cells containing newlines in double quotes, and escapes internal quotes as "".
+ * Parse Excel quoted CSV-style tab-separated cells.
+ * Excel wraps cells containing newlines in double quotes, escapes internal quotes as "".
+ * Returns array of cell strings, or null if not in quoted format.
  */
-function parseExcelCells(text) {
+function parseQuotedCells(text) {
   // Normalize line endings
   text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-  // Remove trailing newline(s) (Excel often adds one)
   while (text.endsWith('\n')) text = text.slice(0, -1);
+
+  // Quick check: must start with a quote to be quoted format
+  // (or at least the majority of cells should be quoted)
+  const hasQuotedStart = text[0] === '"';
+  const tabBeforeQuote = text.indexOf('\t"') !== -1;
+  if (!hasQuotedStart && !tabBeforeQuote) return null;
 
   const cells = [];
   let i = 0;
@@ -1004,17 +1017,15 @@ function parseExcelCells(text) {
 
   while (i < len) {
     if (text[i] === '"') {
-      // Quoted cell — read until closing quote
+      // Quoted cell — read until unescaped closing quote
       i++; // skip opening quote
       let cell = '';
       while (i < len) {
         if (text[i] === '"') {
           if (i + 1 < len && text[i + 1] === '"') {
-            // Escaped quote ""
             cell += '"';
             i += 2;
           } else {
-            // Closing quote
             i++; // skip closing quote
             break;
           }
@@ -1024,17 +1035,15 @@ function parseExcelCells(text) {
         }
       }
       cells.push(cell);
-      // Skip delimiter (tab) or stop at end/newline
       if (i < len && text[i] === '\t') {
         i++;
       } else {
-        // End of row or end of string
         break;
       }
     } else {
-      // Unquoted cell — read until tab or end
+      // Unquoted cell — read until tab
       let cell = '';
-      while (i < len && text[i] !== '\t' && text[i] !== '\n') {
+      while (i < len && text[i] !== '\t') {
         cell += text[i];
         i++;
       }
@@ -1047,7 +1056,6 @@ function parseExcelCells(text) {
     }
   }
 
-  // Validate: should have 2-4 cells with at least some content
   if (cells.length < 2 || cells.length > 4) return null;
   if (cells.every(c => c.trim() === '')) return null;
 
@@ -1061,6 +1069,30 @@ document.addEventListener('paste', function(e) {
   if (!text) return;
 
   e.preventDefault();
+
+  // Debug mode: press Shift before paste to show raw clipboard dump
+  if (e.shiftKey || window._debugPaste) {
+    const dump = JSON.stringify(text);
+    const tabCount = (text.match(/\t/g) || []).length;
+    const nlCount = (text.match(/\n/g) || []).length;
+    const quoteCount = (text.match(/"/g) || []).length;
+    const quotedCells = parseQuotedCells(text);
+    const parsed = parsePaste(text);
+    const info = '📋 剪贴板调试信息:\n' +
+      '长度: ' + text.length + ' 字符\n' +
+      'Tab 数: ' + tabCount + '\n' +
+      '换行数: ' + nlCount + '\n' +
+      '引号数: ' + quoteCount + '\n' +
+      'parseQuotedCells: ' + (quotedCells ? quotedCells.length + ' cells' : 'null') + '\n' +
+      'parsePaste: ' + (parsed ? parsed.versions.length + ' versions' : 'null') + '\n' +
+      '前 500 字符 (JSON转义): ' + dump.substring(0, 500);
+    alert(info);
+    console.log('=== Clipboard Debug ===');
+    console.log('Raw text:', dump);
+    console.log('parseQuotedCells:', quotedCells);
+    console.log('parsePaste:', parsed);
+    return;
+  }
 
   const parsed = parsePaste(text);
   if (parsed && parsed.versions) {
