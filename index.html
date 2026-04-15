@@ -13,13 +13,12 @@
     --text-muted: #888;
     --header-bg: #2c3e50;
 
-    /* Diff colors — matching the reference image exactly */
-    --del-bg: #fce8e6;        /* light red — whole paragraph bg */
-    --del-hl: #f5a9a3;        /* dark red — specific diff words */
+    --del-bg: #fce8e6;
+    --del-hl: #f5a9a3;
     --del-text: #1a1a1a;
 
-    --add-bg: #d9f4dc;        /* light green — whole paragraph bg */
-    --add-hl: #6ccf78;        /* dark green — specific diff words */
+    --add-bg: #d9f4dc;
+    --add-hl: #6ccf78;
     --add-text: #1a1a1a;
 
     --line-num-bg: #f8f8f8;
@@ -36,7 +35,6 @@
     min-height: 100vh;
   }
 
-  /* ===== Header ===== */
   .header {
     background: var(--header-bg);
     color: #fff;
@@ -48,7 +46,7 @@
   .header h1 { font-size: 18px; font-weight: 600; letter-spacing: .3px; }
   .header .hint { font-size: 12px; opacity: .7; margin-top: 2px; }
 
-  /* ===== Landing / Paste zone ===== */
+  /* ===== Landing ===== */
   .landing {
     max-width: 900px;
     margin: 60px auto;
@@ -65,7 +63,6 @@
     background: var(--card-bg);
     cursor: pointer;
     transition: all .25s;
-    position: relative;
   }
   .paste-zone:hover, .paste-zone.drag-over {
     border-color: #4a90d9;
@@ -140,6 +137,7 @@
     font-family: inherit;
   }
   .manual-input .btn-row { text-align: center; }
+
   .compare-btn {
     background: var(--header-bg);
     color: #fff;
@@ -198,12 +196,68 @@
   }
   .back-btn:hover { border-color: #4a90d9; color: #4a90d9; }
 
-  /* ===== Side-by-side aligned container ===== */
+  /* ===== Diff Tabs ===== */
+  .diff-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 0;
+    border-bottom: 2px solid var(--border);
+    background: var(--card-bg);
+    border-radius: 10px 10px 0 0;
+    overflow: hidden;
+  }
+  .diff-tab {
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-muted);
+    border: none;
+    background: none;
+    transition: all .2s;
+    position: relative;
+    white-space: nowrap;
+  }
+  .diff-tab:hover { color: var(--text); background: #f0f6ff; }
+  .diff-tab.active {
+    color: #4a90d9;
+    background: #fff;
+  }
+  .diff-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #4a90d9;
+    border-radius: 3px 3px 0 0;
+  }
+  .diff-tab .tab-badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    margin-left: 6px;
+    font-weight: 500;
+  }
+  .diff-tab .tab-badge.has-diff { background: #fce8e6; color: #c62828; }
+  .diff-tab .tab-badge.no-diff { background: #d9f4dc; color: #2e7d32; }
+
+  .diff-panel { display: none; }
+  .diff-panel.active { display: block; }
+
+  /* ===== Side-by-side container ===== */
   .sbs-container {
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-top: none;
+    border-radius: 0 0 10px 10px;
     overflow: hidden;
+  }
+  .sbs-container.single-mode {
+    border-radius: 10px;
+    border-top: 1px solid var(--border);
   }
   .sbs-header {
     display: grid;
@@ -227,7 +281,6 @@
     overflow-x: hidden;
   }
 
-  /* Each aligned row is a pair of left+right blocks at the same height */
   .sbs-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -238,7 +291,6 @@
   .sbs-cell {
     display: flex;
     min-height: 28px;
-    /* key: both cells in the same row stretch to the taller one */
   }
   .sbs-cell:first-child {
     border-right: 1px solid var(--border);
@@ -264,19 +316,14 @@
     line-height: 1.7;
   }
 
-  /* Colors */
   .sbs-cell.cell-del { background: var(--del-bg); }
   .sbs-cell.cell-del .cell-num { background: #f8d0cc; }
-
   .sbs-cell.cell-add { background: var(--add-bg); }
   .sbs-cell.cell-add .cell-num { background: #b8e6bf; }
-
   .sbs-cell.cell-eq { background: #fff; }
-
   .sbs-cell.cell-empty { background: #fafafa; }
   .sbs-cell.cell-empty .cell-num { background: #f2f2f2; }
 
-  /* Word-level highlights */
   .hl-del {
     background: var(--del-hl);
     border-radius: 3px;
@@ -288,7 +335,6 @@
     padding: 1px 1px;
   }
 
-  /* No diff */
   .no-diff {
     text-align: center;
     padding: 50px;
@@ -297,7 +343,6 @@
   }
   .no-diff .big { font-size: 40px; margin-bottom: 8px; }
 
-  /* Toast */
   .toast {
     position: fixed;
     top: 70px;
@@ -343,11 +388,28 @@
 
   .hidden { display: none !important; }
 
+  /* ===== Version count indicator ===== */
+  .version-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    background: #f0f4f8;
+    padding: 4px 12px;
+    border-radius: 6px;
+  }
+  .version-info .count {
+    font-weight: 700;
+    color: #4a90d9;
+  }
+
   @media (max-width: 768px) {
     .sbs-header { grid-template-columns: 1fr; }
     .sbs-row { grid-template-columns: 1fr; }
     .sbs-cell:first-child { border-right: none; border-bottom: 1px solid var(--border); }
     .manual-input .input-grid { grid-template-columns: 1fr; }
+    .diff-tabs { overflow-x: auto; }
   }
 </style>
 </head>
@@ -356,7 +418,7 @@
 <div class="header">
   <div>
     <h1>📝 Markdown Diff 对比工具</h1>
-    <div class="hint">从 Excel 复制两个单元格，直接粘贴即可对比</div>
+    <div class="hint">从 Excel 复制单元格（支持多版本 GSB 对比），直接粘贴即可</div>
   </div>
 </div>
 
@@ -367,13 +429,14 @@
 <div class="landing" id="landing">
   <h2>粘贴 Excel 单元格，即时查看 Diff</h2>
   <p>
-    在 Excel 中选中两个单元格（旧版 + 新版），<kbd>Ctrl+C</kbd> 复制后，在此页面 <kbd>Ctrl+V</kbd> 粘贴<br>
-    工具会自动识别 Tab 分隔的两列数据并进行对比
+    在 Excel 中选中 2~4 个单元格（旧版 + 新版1 + 新版2…），<kbd>Ctrl+C</kbd> 复制后，在此页面 <kbd>Ctrl+V</kbd> 粘贴<br>
+    工具会自动识别 Tab 分隔的多列数据，第 1 列为旧版，后续为新版，分别与旧版做 Diff<br>
+    <span style="font-size:12px;color:#aaa;">支持 2~4 个版本对比（旧版 vs 新版1、旧版 vs 新版2、旧版 vs 新版3）</span>
   </p>
   <div class="paste-zone" id="paste-zone" tabindex="0">
     <div class="icon">📋</div>
     <div class="main-text">在此页面任意位置按 <span class="kbd">Ctrl</span>+<span class="kbd">V</span> 粘贴</div>
-    <div class="sub-text">支持从 Excel / WPS 复制两个单元格（Tab 分隔），也可粘贴纯文本</div>
+    <div class="sub-text">支持从 Excel / WPS 复制 2~4 个单元格（Tab 分隔），自动识别旧版 + 多个新版</div>
   </div>
   <div class="or-divider">—— 或者 ——</div>
   <button class="manual-toggle" onclick="showManualInput()">手动输入两段文本进行对比</button>
@@ -400,13 +463,17 @@
 <!-- Diff result -->
 <div class="diff-result" id="diff-result">
   <div class="result-toolbar">
-    <div class="stats" id="stats"></div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="stats" id="stats"></div>
+      <div class="version-info" id="version-info"></div>
+    </div>
     <div style="display:flex;align-items:center;gap:12px;">
       <span class="paste-hint">💡 直接 <span class="kbd">Ctrl</span>+<span class="kbd">V</span> 粘贴下一个</span>
       <button class="back-btn" onclick="goBack()">← 回到首页</button>
     </div>
   </div>
-  <div id="diff-output"></div>
+  <div id="diff-tabs-container"></div>
+  <div id="diff-panels-container"></div>
 </div>
 
 <script>
@@ -422,9 +489,6 @@ function hl(s, type) {
 
 // ===================== Tokenizer =====================
 
-/**
- * Tokenizer: split into individual CJK characters and Latin word/whitespace groups.
- */
 function tokenize(str) {
   const result = [];
   const re = /[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\u2000-\u206f]|[a-zA-Z0-9]+|\s+|[^\s\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\u2000-\u206f]+/g;
@@ -437,14 +501,9 @@ function tokenize(str) {
 
 // ===================== LCS Helper =====================
 
-/**
- * Generic LCS diff on arrays of items.
- * Returns array of {type: 'eq'|'del'|'add', oldIdx, newIdx, value}.
- */
 function lcs(oldArr, newArr, eq) {
   if (!eq) eq = (a, b) => a === b;
   const m = oldArr.length, n = newArr.length;
-  // Use standard DP — for paragraph counts this is always small
   const dp = [];
   for (let i = 0; i <= m; i++) {
     dp[i] = new Array(n + 1).fill(0);
@@ -477,11 +536,6 @@ function lcs(oldArr, newArr, eq) {
 
 // ===================== Paragraph Splitting =====================
 
-/**
- * Split markdown into paragraphs.
- * A paragraph boundary is one or more blank lines (lines containing only whitespace).
- * This preserves markdown structure: headings, list blocks, text blocks stay together.
- */
 function splitParagraphs(text) {
   const lines = text.split('\n');
   const paragraphs = [];
@@ -493,7 +547,6 @@ function splitParagraphs(text) {
         paragraphs.push(current.join('\n'));
         current = [];
       }
-      // Keep blank line as a separator paragraph to maintain line numbering
       paragraphs.push('');
     } else {
       current.push(line);
@@ -505,19 +558,12 @@ function splitParagraphs(text) {
   return paragraphs;
 }
 
-/**
- * Normalize a paragraph for comparison purposes.
- * Trim whitespace so minor formatting differences don't cause mismatches.
- */
 function normPara(p) {
   return p.trim().replace(/\s+/g, ' ');
 }
 
 // ===================== Inline Diff =====================
 
-/**
- * Fine-grained token-level diff for inline highlighting.
- */
 function diffInline(oldStr, newStr) {
   const oldToks = tokenize(oldStr);
   const newToks = tokenize(newStr);
@@ -558,32 +604,20 @@ function diffInline(oldStr, newStr) {
 
 // ===================== Paragraph-level Diff =====================
 
-/**
- * Diff at paragraph level, then within each changed paragraph do line+word diff.
- * Returns aligned row pairs for rendering.
- */
 function diffParagraphs(oldText, newText) {
   const oldParas = splitParagraphs(oldText);
   const newParas = splitParagraphs(newText);
 
-  // LCS on paragraphs — use normalized comparison with a similarity threshold
-  // for modified paragraphs (not strictly equal but similar enough to pair)
   const paraDiff = lcs(oldParas, newParas, (a, b) => normPara(a) === normPara(b));
 
-  // Now build aligned pairs.
-  // For 'eq' paragraphs: lines match 1:1
-  // For del/add blocks: we try to pair them by similarity, then do line-level diff within each pair
-
-  const alignedRows = []; // {leftLines: [{num, type, html}], rightLines: [{num, type, html}]}
-
+  const alignedRows = [];
   let oldLineNum = 0, newLineNum = 0;
-
   let idx = 0;
+
   while (idx < paraDiff.length) {
     const op = paraDiff[idx];
 
     if (op.type === 'eq') {
-      // Paragraph is the same — render each line as equal
       const lines = op.value.split('\n');
       const leftLines = [], rightLines = [];
       for (const line of lines) {
@@ -594,7 +628,6 @@ function diffParagraphs(oldText, newText) {
       alignedRows.push({leftLines, rightLines});
       idx++;
     } else {
-      // Collect consecutive del+add blocks for pairing
       const delParas = [], addParas = [];
       while (idx < paraDiff.length && paraDiff[idx].type === 'del') {
         delParas.push(paraDiff[idx].value);
@@ -605,18 +638,15 @@ function diffParagraphs(oldText, newText) {
         idx++;
       }
 
-      // Try to pair del/add paragraphs by similarity
       const paired = pairParagraphs(delParas, addParas);
 
       for (const pair of paired) {
         if (pair.type === 'pair') {
-          // Both sides exist — do line-level diff within the paragraph pair
           const pairResult = diffWithinParagraph(pair.old, pair.new, oldLineNum, newLineNum);
           alignedRows.push({leftLines: pairResult.leftLines, rightLines: pairResult.rightLines});
           oldLineNum = pairResult.oldLineNum;
           newLineNum = pairResult.newLineNum;
         } else if (pair.type === 'del') {
-          // Only left side
           const lines = pair.value.split('\n');
           const leftLines = [], rightLines = [];
           for (const line of lines) {
@@ -626,7 +656,6 @@ function diffParagraphs(oldText, newText) {
           }
           alignedRows.push({leftLines, rightLines});
         } else {
-          // Only right side
           const lines = pair.value.split('\n');
           const leftLines = [], rightLines = [];
           for (const line of lines) {
@@ -643,16 +672,11 @@ function diffParagraphs(oldText, newText) {
   return {alignedRows, oldLineCount: oldLineNum, newLineCount: newLineNum};
 }
 
-/**
- * Pair del and add paragraphs by similarity.
- * Uses a simple greedy approach: for each del paragraph, find the most similar add paragraph.
- */
 function pairParagraphs(delParas, addParas) {
   if (delParas.length === 0 && addParas.length === 0) return [];
   if (delParas.length === 0) return addParas.map(p => ({type: 'add', value: p}));
   if (addParas.length === 0) return delParas.map(p => ({type: 'del', value: p}));
 
-  // Similarity: ratio of common tokens
   function similarity(a, b) {
     if (a.trim() === '' && b.trim() === '') return 1;
     if (a.trim() === '' || b.trim() === '') return 0;
@@ -667,7 +691,6 @@ function pairParagraphs(delParas, addParas) {
   const result = [];
   const usedAdd = new Set();
 
-  // For each del para, find best matching add para (if similarity > threshold)
   const delMatches = [];
   for (let di = 0; di < delParas.length; di++) {
     let bestSim = 0, bestIdx = -1;
@@ -684,11 +707,8 @@ function pairParagraphs(delParas, addParas) {
     }
   }
 
-  // Build output: interleave pairs and unmatched
-  // First, output paired and unmatched dels in order
   let nextAddIdx = 0;
   for (const m of delMatches) {
-    // Output any unmatched adds that come before this paired add
     if (m.ai >= 0) {
       while (nextAddIdx < m.ai) {
         if (!usedAdd.has(nextAddIdx)) {
@@ -702,7 +722,6 @@ function pairParagraphs(delParas, addParas) {
       result.push({type: 'del', value: delParas[m.di]});
     }
   }
-  // Remaining unmatched adds
   for (let ai = nextAddIdx; ai < addParas.length; ai++) {
     if (!usedAdd.has(ai)) {
       result.push({type: 'add', value: addParas[ai]});
@@ -712,9 +731,6 @@ function pairParagraphs(delParas, addParas) {
   return result;
 }
 
-/**
- * Within a paired paragraph, do line-level LCS diff, then inline diff per line pair.
- */
 function diffWithinParagraph(oldPara, newPara, startOldLine, startNewLine) {
   const oldLines = oldPara.split('\n');
   const newLines = newPara.split('\n');
@@ -722,47 +738,36 @@ function diffWithinParagraph(oldPara, newPara, startOldLine, startNewLine) {
 
   const leftLines = [], rightLines = [];
   let oldNum = startOldLine, newNum = startNewLine;
-
   let li = 0;
+
   while (li < lineDiff.length) {
     const d = lineDiff[li];
-
     if (d.type === 'eq') {
       oldNum++; newNum++;
-      // Even for "equal" lines within a changed paragraph, show them normally
       leftLines.push({num: oldNum, type: 'eq', html: esc(d.value)});
       rightLines.push({num: newNum, type: 'eq', html: esc(d.value)});
       li++;
     } else {
-      // Collect del + add block
       const dels = [], adds = [];
       while (li < lineDiff.length && lineDiff[li].type === 'del') {
-        dels.push(lineDiff[li].value);
-        li++;
+        dels.push(lineDiff[li].value); li++;
       }
       while (li < lineDiff.length && lineDiff[li].type === 'add') {
-        adds.push(lineDiff[li].value);
-        li++;
+        adds.push(lineDiff[li].value); li++;
       }
 
       const pairCount = Math.min(dels.length, adds.length);
-
-      // Paired lines: inline diff
       for (let p = 0; p < pairCount; p++) {
         oldNum++; newNum++;
         const wd = diffInline(dels[p], adds[p]);
         leftLines.push({num: oldNum, type: 'del', html: wd.oldHtml});
         rightLines.push({num: newNum, type: 'add', html: wd.newHtml});
       }
-
-      // Remaining unpaired dels
       for (let p = pairCount; p < dels.length; p++) {
         oldNum++;
         leftLines.push({num: oldNum, type: 'del', html: esc(dels[p])});
         rightLines.push({num: null, type: 'empty', html: ''});
       }
-
-      // Remaining unpaired adds
       for (let p = pairCount; p < adds.length; p++) {
         newNum++;
         leftLines.push({num: null, type: 'empty', html: ''});
@@ -776,17 +781,16 @@ function diffWithinParagraph(oldPara, newPara, startOldLine, startNewLine) {
 
 // ===================== Rendering =====================
 
-function renderAligned(alignedRows) {
-  let html = '<div class="sbs-container">';
+function renderAligned(alignedRows, oldLabel, newLabel) {
+  let html = '<div class="sbs-container' + (currentVersions.length <= 2 ? ' single-mode' : '') + '">';
   html += '<div class="sbs-header">';
-  html += '<div class="panel-label">📄 原始版本（Old）</div>';
-  html += '<div class="panel-label">📄 新版本（New）</div>';
+  html += '<div class="panel-label">📄 ' + esc(oldLabel) + '</div>';
+  html += '<div class="panel-label">📄 ' + esc(newLabel) + '</div>';
   html += '</div>';
-  html += '<div class="sbs-scroll" id="sbs-scroll">';
+  html += '<div class="sbs-scroll">';
 
   for (const block of alignedRows) {
     const maxLines = Math.max(block.leftLines.length, block.rightLines.length);
-
     for (let i = 0; i < maxLines; i++) {
       const left = i < block.leftLines.length
         ? block.leftLines[i]
@@ -796,19 +800,14 @@ function renderAligned(alignedRows) {
         : {num: null, type: 'empty', html: ''};
 
       html += '<div class="sbs-row">';
-
-      // Left cell
       html += '<div class="sbs-cell cell-' + left.type + '">';
       html += '<div class="cell-num">' + (left.num !== null ? left.num : '') + '</div>';
       html += '<div class="cell-content">' + left.html + '</div>';
       html += '</div>';
-
-      // Right cell
       html += '<div class="sbs-cell cell-' + right.type + '">';
       html += '<div class="cell-num">' + (right.num !== null ? right.num : '') + '</div>';
       html += '<div class="cell-content">' + right.html + '</div>';
       html += '</div>';
-
       html += '</div>';
     }
   }
@@ -817,73 +816,264 @@ function renderAligned(alignedRows) {
   return html;
 }
 
-function showDiff(oldText, newText) {
-  const {alignedRows, oldLineCount, newLineCount} = diffParagraphs(oldText, newText);
+// ===================== Multi-version Diff Display =====================
 
-  // Stats
-  let adds = 0, dels = 0, eqs = 0;
-  for (const block of alignedRows) {
-    for (const l of block.leftLines) {
-      if (l.type === 'del') dels++;
+// Global state: current loaded versions
+var currentVersions = []; // [oldText, newText1, newText2, ...]
+
+function showMultiDiff(versions) {
+  currentVersions = versions;
+  const oldText = versions[0];
+  const newVersions = versions.slice(1);
+
+  // Compute all diffs
+  const diffs = [];
+  for (let i = 0; i < newVersions.length; i++) {
+    const result = diffParagraphs(oldText, newVersions[i]);
+    let adds = 0, dels = 0, eqs = 0;
+    for (const block of result.alignedRows) {
+      for (const l of block.leftLines) { if (l.type === 'del') dels++; }
+      for (const r of block.rightLines) {
+        if (r.type === 'add') adds++;
+        else if (r.type === 'eq') eqs++;
+      }
     }
-    for (const r of block.rightLines) {
-      if (r.type === 'add') adds++;
-      else if (r.type === 'eq') eqs++;
-    }
+    diffs.push({...result, adds, dels, eqs, index: i});
   }
 
-  const statsEl = document.getElementById('stats');
-  statsEl.innerHTML =
-    '<span><span class="dot del"></span>' + dels + ' 行删除</span>' +
-    '<span><span class="dot add"></span>' + adds + ' 行新增</span>' +
-    '<span><span class="dot eq"></span>' + eqs + ' 行相同</span>';
+  // Version info
+  const versionInfoEl = document.getElementById('version-info');
+  versionInfoEl.innerHTML = '识别到 <span class="count">' + versions.length + '</span> 个版本（1 旧版 + ' + newVersions.length + ' 新版）';
 
-  const output = document.getElementById('diff-output');
-
-  if (adds === 0 && dels === 0) {
-    output.innerHTML = '<div class="no-diff"><div class="big">✅</div>两版内容完全相同，无差异。</div>';
+  // If only one new version, no tabs needed
+  if (newVersions.length === 1) {
+    document.getElementById('diff-tabs-container').innerHTML = '';
+    const d = diffs[0];
+    updateStats(d.dels, d.adds, d.eqs);
+    const panelsHtml = '<div class="diff-panel active">' +
+      (d.adds === 0 && d.dels === 0
+        ? '<div class="sbs-container single-mode"><div class="no-diff"><div class="big">✅</div>两版内容完全相同，无差异。</div></div>'
+        : renderAligned(d.alignedRows, '旧版', '新版')) +
+      '</div>';
+    document.getElementById('diff-panels-container').innerHTML = panelsHtml;
   } else {
-    output.innerHTML = renderAligned(alignedRows);
+    // Build tabs
+    let tabsHtml = '<div class="diff-tabs">';
+    for (let i = 0; i < diffs.length; i++) {
+      const d = diffs[i];
+      const hasDiff = d.adds > 0 || d.dels > 0;
+      const badgeClass = hasDiff ? 'has-diff' : 'no-diff';
+      const badgeText = hasDiff ? (d.dels + d.adds) + ' 处差异' : '无差异';
+      tabsHtml += '<button class="diff-tab' + (i === 0 ? ' active' : '') + '" data-idx="' + i + '" onclick="switchTab(' + i + ')">';
+      tabsHtml += '旧版 vs 新版' + (i + 1);
+      tabsHtml += '<span class="tab-badge ' + badgeClass + '">' + badgeText + '</span>';
+      tabsHtml += '</button>';
+    }
+    tabsHtml += '</div>';
+    document.getElementById('diff-tabs-container').innerHTML = tabsHtml;
+
+    // Build panels
+    let panelsHtml = '';
+    for (let i = 0; i < diffs.length; i++) {
+      const d = diffs[i];
+      panelsHtml += '<div class="diff-panel' + (i === 0 ? ' active' : '') + '" data-idx="' + i + '">';
+      if (d.adds === 0 && d.dels === 0) {
+        panelsHtml += '<div class="sbs-container"><div class="no-diff"><div class="big">✅</div>两版内容完全相同，无差异。</div></div>';
+      } else {
+        panelsHtml += renderAligned(d.alignedRows, '旧版', '新版' + (i + 1));
+      }
+      panelsHtml += '</div>';
+    }
+    document.getElementById('diff-panels-container').innerHTML = panelsHtml;
+
+    // Show stats for first tab
+    updateStats(diffs[0].dels, diffs[0].adds, diffs[0].eqs);
   }
 
-  // Show result, hide landing
+  // Store diffs for tab switching
+  window._allDiffs = diffs;
+
+  // Show result
   document.getElementById('landing').style.display = 'none';
   document.getElementById('manual-input').classList.remove('show');
   document.getElementById('diff-result').classList.add('show');
 }
 
+function switchTab(idx) {
+  // Update tab active state
+  document.querySelectorAll('.diff-tab').forEach(t => {
+    t.classList.toggle('active', parseInt(t.dataset.idx) === idx);
+  });
+  // Update panel visibility
+  document.querySelectorAll('.diff-panel').forEach(p => {
+    p.classList.toggle('active', parseInt(p.dataset.idx) === idx);
+  });
+  // Update stats
+  if (window._allDiffs && window._allDiffs[idx]) {
+    const d = window._allDiffs[idx];
+    updateStats(d.dels, d.adds, d.eqs);
+  }
+}
+
+function updateStats(dels, adds, eqs) {
+  const statsEl = document.getElementById('stats');
+  statsEl.innerHTML =
+    '<span><span class="dot del"></span>' + dels + ' 行删除</span>' +
+    '<span><span class="dot add"></span>' + adds + ' 行新增</span>' +
+    '<span><span class="dot eq"></span>' + eqs + ' 行相同</span>';
+}
+
+// Backward compat: 2-version showDiff
+function showDiff(oldText, newText) {
+  showMultiDiff([oldText, newText]);
+}
+
 // ===================== Clipboard Handling =====================
 
 function parsePaste(text) {
+  // Excel copies multiple cells in a row as tab-separated values
+  // Each row is separated by \r\n or \n
+  // For multi-cell single-row paste: "cell1\tcell2\tcell3\tcell4"
+  // For multi-line cells, Excel wraps cell content in quotes: "\"line1\nline2\"\t\"line3\nline4\""
+
+  // First, try to parse as quoted CSV-style tab-separated (handles newlines within cells)
+  const cells = parseExcelCells(text);
+
+  if (cells && cells.length >= 2 && cells.length <= 4) {
+    return { versions: cells };
+  }
+
+  // Fallback: simple tab split (single-line cells)
   const tabIdx = text.indexOf('\t');
   if (tabIdx === -1) return null;
 
+  // Check if it's multi-row with consistent tab structure (old behavior)
   const lines = text.split(/\r?\n/);
-  const allHaveOneTab = lines.every(line => {
-    const tabs = (line.match(/\t/g) || []).length;
-    return tabs === 1 || line.trim() === '';
-  });
+  const firstLineTabs = (lines[0].match(/\t/g) || []).length;
 
-  if (allHaveOneTab && lines.length > 1 && lines.some(l => l.includes('\t'))) {
-    let left = [], right = [];
-    for (const line of lines) {
-      if (line.includes('\t')) {
-        const [l, r] = line.split('\t', 2);
-        left.push(l);
-        right.push(r);
-      } else {
-        left.push(line);
-        right.push(line);
+  if (firstLineTabs >= 1 && firstLineTabs <= 3) {
+    // Try to split by tabs — each tab boundary is a new cell
+    const parts = lines[0].split('\t');
+    if (parts.length >= 2 && parts.length <= 4) {
+      // Single row with multiple tabs
+      if (lines.length === 1 || (lines.length === 2 && lines[1].trim() === '')) {
+        return { versions: parts };
       }
     }
-    return {old: left.join('\n'), new: right.join('\n')};
+
+    // Multi-row: each row has the same tab count, reconstruct columns
+    const allSame = lines.filter(l => l.trim() !== '').every(l => (l.match(/\t/g) || []).length === firstLineTabs);
+    if (allSame) {
+      const numCols = firstLineTabs + 1;
+      if (numCols >= 2 && numCols <= 4) {
+        const cols = Array.from({length: numCols}, () => []);
+        for (const line of lines) {
+          if (line.trim() === '' && cols[0].length > 0) {
+            // Preserve blank lines
+            for (let c = 0; c < numCols; c++) cols[c].push('');
+            continue;
+          }
+          const parts = line.split('\t');
+          for (let c = 0; c < numCols; c++) {
+            cols[c].push(parts[c] || '');
+          }
+        }
+        return { versions: cols.map(c => c.join('\n').replace(/\n+$/, '')) };
+      }
+    }
   }
 
-  return {old: text.substring(0, tabIdx), new: text.substring(tabIdx + 1)};
+  // Ultimate fallback: just split on first tab (2 versions)
+  return { versions: [text.substring(0, tabIdx), text.substring(tabIdx + 1)] };
+}
+
+/**
+ * Parse Excel-style tab-separated cells that may contain quoted values with newlines.
+ * Excel wraps cells containing newlines in double quotes, and escapes internal quotes as "".
+ */
+function parseExcelCells(text) {
+  // Normalize line endings
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Remove trailing newline (Excel often adds one)
+  if (text.endsWith('\n')) text = text.slice(0, -1);
+
+  const cells = [];
+  let i = 0;
+  const len = text.length;
+
+  while (i <= len) {
+    if (i === len) {
+      // Trailing empty cell
+      if (cells.length > 0) cells.push('');
+      break;
+    }
+
+    if (text[i] === '"') {
+      // Quoted cell — read until closing quote
+      i++; // skip opening quote
+      let cell = '';
+      while (i < len) {
+        if (text[i] === '"') {
+          if (i + 1 < len && text[i + 1] === '"') {
+            // Escaped quote
+            cell += '"';
+            i += 2;
+          } else {
+            // Closing quote
+            i++; // skip closing quote
+            break;
+          }
+        } else {
+          cell += text[i];
+          i++;
+        }
+      }
+      cells.push(cell);
+      // Skip delimiter
+      if (i < len && text[i] === '\t') {
+        i++;
+      } else if (i < len && text[i] === '\n') {
+        // End of row — for single-row Excel paste, this is the end
+        break;
+      }
+    } else {
+      // Unquoted cell — read until tab or newline
+      let cell = '';
+      while (i < len && text[i] !== '\t') {
+        if (text[i] === '\n') {
+          // If we already have cells and hit newline, this might be end of row
+          // But if it's just a 2-cell paste with no quotes, this could be multiline content
+          // Heuristic: if we haven't found any tab yet in THIS cell, treat newline as content
+          if (cells.length === 0 && !cell.includes('\t')) {
+            // This might be a multiline single cell — but we need at least 2 cells
+            // Continue reading, the outer logic will handle fallback
+            cell += text[i];
+            i++;
+            continue;
+          }
+          break;
+        }
+        cell += text[i];
+        i++;
+      }
+      cells.push(cell);
+      if (i < len && text[i] === '\t') {
+        i++;
+      } else {
+        break;
+      }
+    }
+  }
+
+  // Validate: should have 2-4 cells with at least some content
+  if (cells.length < 2 || cells.length > 4) return null;
+  if (cells.every(c => c.trim() === '')) return null;
+
+  return cells;
 }
 
 document.addEventListener('paste', function(e) {
-  // Allow normal paste inside textareas (manual input mode)
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
 
   const text = (e.clipboardData || window.clipboardData).getData('text');
@@ -892,25 +1082,19 @@ document.addEventListener('paste', function(e) {
   e.preventDefault();
 
   const parsed = parsePaste(text);
-  if (parsed) {
-    showDiff(parsed.old, parsed.new);
-    showToast('✅ 已加载新数据并对比');
+  if (parsed && parsed.versions) {
+    const v = parsed.versions;
+    showMultiDiff(v);
+    if (v.length === 2) {
+      showToast('✅ 已加载 2 个版本并对比');
+    } else {
+      showToast('✅ 已加载 ' + v.length + ' 个版本（1 旧版 + ' + (v.length - 1) + ' 新版）');
+    }
   } else {
     showManualInput();
     document.getElementById('text-old').value = text;
     document.getElementById('text-new').focus();
     showToast('📋 已粘贴到"原始版本"，请再粘贴新版本');
-  }
-});
-
-// Also support Ctrl+V / Cmd+V anywhere — even when focus is inside the diff result
-// This catches cases where the default paste event doesn't fire (e.g. focus on a div)
-document.addEventListener('keydown', function(e) {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-    // If we're in manual input textareas, let native paste handle it
-    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
-    // The paste event will handle the rest — this is just a safety net
-    // to ensure focus doesn't prevent paste from firing
   }
 });
 
