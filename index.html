@@ -404,6 +404,77 @@
     color: #4a90d9;
   }
 
+  /* ===== Overview multi-column layout ===== */
+  .overview-container {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    overflow: hidden;
+  }
+  .overview-header {
+    display: grid;
+    border-bottom: 1px solid var(--border);
+  }
+  .overview-header .panel-label {
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--line-num-bg);
+    border-right: 1px solid var(--border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .overview-header .panel-label:last-child { border-right: none; }
+  .overview-header .panel-label.label-old { background: #f0f0f5; }
+  .overview-scroll {
+    max-height: 85vh;
+    overflow: auto;
+  }
+  .overview-row {
+    display: grid;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .overview-row:last-child { border-bottom: none; }
+  .overview-cell {
+    display: flex;
+    min-height: 28px;
+    border-right: 1px solid var(--border);
+  }
+  .overview-cell:last-child { border-right: none; }
+  .overview-cell .cell-num {
+    flex-shrink: 0;
+    width: 36px;
+    text-align: right;
+    color: var(--line-num-text);
+    background: var(--line-num-bg);
+    border-right: 1px solid var(--border);
+    font-size: 11px;
+    padding: 3px 6px 3px 2px;
+    line-height: 1.7;
+    user-select: none;
+  }
+  .overview-cell .cell-content {
+    flex: 1;
+    padding: 3px 10px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-size: 13px;
+    line-height: 1.7;
+    min-width: 0;
+  }
+  .overview-cell.cell-del { background: var(--del-bg); }
+  .overview-cell.cell-del .cell-num { background: #f8d0cc; }
+  .overview-cell.cell-add { background: var(--add-bg); }
+  .overview-cell.cell-add .cell-num { background: #b8e6bf; }
+  .overview-cell.cell-eq { background: #fff; }
+  .overview-cell.cell-empty { background: #fafafa; }
+  .overview-cell.cell-empty .cell-num { background: #f2f2f2; }
+  .overview-cell.cell-old-base { background: #f8f8fc; }
+  .overview-cell.cell-old-base .cell-num { background: #eeeef5; }
+
   @media (max-width: 768px) {
     .sbs-header { grid-template-columns: 1fr; }
     .sbs-row { grid-template-columns: 1fr; }
@@ -816,6 +887,184 @@ function renderAligned(alignedRows, oldLabel, newLabel) {
   return html;
 }
 
+// ===================== Unified Alignment for Overview =====================
+
+/**
+ * Flatten alignedRows into a linear array of {left, right} line entries.
+ * Each entry has: {oldNum, oldType, oldHtml, newNum, newType, newHtml}
+ */
+function flattenAligned(alignedRows) {
+  const flat = [];
+  for (const block of alignedRows) {
+    const maxLines = Math.max(block.leftLines.length, block.rightLines.length);
+    for (let i = 0; i < maxLines; i++) {
+      const left = i < block.leftLines.length
+        ? block.leftLines[i]
+        : {num: null, type: 'empty', html: ''};
+      const right = i < block.rightLines.length
+        ? block.rightLines[i]
+        : {num: null, type: 'empty', html: ''};
+      flat.push({
+        oldNum: left.num,
+        oldType: left.type,
+        oldHtml: left.html,
+        newNum: right.num,
+        newType: right.type,
+        newHtml: right.html
+      });
+    }
+  }
+  return flat;
+}
+
+/**
+ * Build a unified row grid across all diffs, using old-version line numbers as anchors.
+ *
+ * Returns: Array of rows. Each row = {
+ *   old: {num, type, html},          // old-version base column
+ *   news: [{num, type, html}, ...]   // one per new-version
+ * }
+ *
+ * Algorithm:
+ * 1. Flatten each diff into linear entries.
+ * 2. Walk all flattened diffs in parallel using cursors.
+ * 3. At each step, find the minimum old-line-number across all cursors (anchors on old text).
+ * 4. If some cursor has inserts (no old-line-num) before the anchor, emit those rows first
+ *    (other columns get empty).
+ * 5. When all cursors reach the same old-line anchor, emit that row together.
+ */
+function unifiedAlign(allFlat, numNew) {
+  const cursors = allFlat.map(() => 0);
+  const rows = [];
+
+  function done() {
+    return cursors.every((c, i) => c >= allFlat[i].length);
+  }
+
+  // Peek the next old-line-number at cursor[i], or Infinity if done / insert-only
+  function peekOldNum(i) {
+    const flat = allFlat[i];
+    let ci = cursors[i];
+    while (ci < flat.length) {
+      if (flat[ci].oldNum !== null) return flat[ci].oldNum;
+      ci++;
+    }
+    return Infinity;
+  }
+
+  while (!done()) {
+    // Find the minimum upcoming old-line-number across all diffs
+    let minOldNum = Infinity;
+    for (let i = 0; i < numNew; i++) {
+      const n = peekOldNum(i);
+      if (n < minOldNum) minOldNum = n;
+    }
+
+    // Phase A: For each diff, emit any insert-only rows (oldNum === null) before minOldNum
+    // We interleave: process diff-by-diff, emitting their inserts
+    for (let i = 0; i < numNew; i++) {
+      const flat = allFlat[i];
+      while (cursors[i] < flat.length && flat[cursors[i]].oldNum === null) {
+        const entry = flat[cursors[i]];
+        // This diff has an insert/empty row before the next anchor
+        const news = [];
+        for (let j = 0; j < numNew; j++) {
+          if (j === i) {
+            news.push({num: entry.newNum, type: entry.newType, html: entry.newHtml});
+          } else {
+            news.push({num: null, type: 'empty', html: ''});
+          }
+        }
+        rows.push({
+          old: {num: null, type: 'empty', html: ''},
+          news
+        });
+        cursors[i]++;
+      }
+    }
+
+    if (minOldNum === Infinity) break; // all done
+
+    // Phase B: All diffs whose current entry has oldNum === minOldNum → consume together
+    const row = {
+      old: null,
+      news: []
+    };
+    for (let i = 0; i < numNew; i++) {
+      const flat = allFlat[i];
+      if (cursors[i] < flat.length && flat[cursors[i]].oldNum === minOldNum) {
+        const entry = flat[cursors[i]];
+        if (!row.old) {
+          row.old = {num: entry.oldNum, type: entry.oldType, html: entry.oldHtml};
+        }
+        row.news.push({num: entry.newNum, type: entry.newType, html: entry.newHtml});
+        cursors[i]++;
+      } else {
+        // This diff doesn't have this old-line (it was deleted in the old alignment)
+        // Show as empty for this new-version column
+        row.news.push({num: null, type: 'empty', html: ''});
+      }
+    }
+    if (!row.old) {
+      row.old = {num: minOldNum, type: 'eq', html: ''};
+    }
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+/**
+ * Render the overview multi-column view.
+ * Columns: [旧版(基准)] [新版1] [新版2] ...
+ */
+function renderOverview(unifiedRows, numNew) {
+  const numCols = 1 + numNew; // old + new1 + new2 + ...
+  const colTemplate = 'minmax(0, 1fr) '.repeat(numCols).trim();
+
+  let html = '<div class="overview-container">';
+
+  // Header
+  html += '<div class="overview-header" style="grid-template-columns:' + colTemplate + '">';
+  html += '<div class="panel-label label-old">📄 旧版（基准）</div>';
+  for (let i = 0; i < numNew; i++) {
+    const label = numNew === 1 ? '新版' : '新版' + (i + 1);
+    html += '<div class="panel-label">📄 ' + label + '</div>';
+  }
+  html += '</div>';
+
+  // Scroll body
+  html += '<div class="overview-scroll">';
+
+  for (const row of unifiedRows) {
+    html += '<div class="overview-row" style="grid-template-columns:' + colTemplate + '">';
+
+    // Old column
+    const oldCell = row.old;
+    const oldCls = oldCell.num !== null
+      ? (oldCell.type === 'del' ? 'cell-del' : 'cell-old-base')
+      : 'cell-empty';
+    html += '<div class="overview-cell ' + oldCls + '">';
+    html += '<div class="cell-num">' + (oldCell.num !== null ? oldCell.num : '') + '</div>';
+    html += '<div class="cell-content">' + oldCell.html + '</div>';
+    html += '</div>';
+
+    // New columns
+    for (let i = 0; i < numNew; i++) {
+      const cell = row.news[i];
+      html += '<div class="overview-cell cell-' + cell.type + '">';
+      html += '<div class="cell-num">' + (cell.num !== null ? cell.num : '') + '</div>';
+      html += '<div class="cell-content">' + cell.html + '</div>';
+      html += '</div>';
+    }
+
+    html += '</div>';
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
 // ===================== Multi-version Diff Display =====================
 
 // Global state: current loaded versions
@@ -845,7 +1094,7 @@ function showMultiDiff(versions) {
   const versionInfoEl = document.getElementById('version-info');
   versionInfoEl.innerHTML = '识别到 <span class="count">' + versions.length + '</span> 个版本（1 旧版 + ' + newVersions.length + ' 新版）';
 
-  // If only one new version, no tabs needed
+  // If only one new version, no tabs needed — but still show overview-style if wanted
   if (newVersions.length === 1) {
     document.getElementById('diff-tabs-container').innerHTML = '';
     const d = diffs[0];
@@ -857,14 +1106,27 @@ function showMultiDiff(versions) {
       '</div>';
     document.getElementById('diff-panels-container').innerHTML = panelsHtml;
   } else {
-    // Build tabs
+    // Build unified overview data
+    const allFlat = diffs.map(d => flattenAligned(d.alignedRows));
+    const unifiedRows = unifiedAlign(allFlat, newVersions.length);
+
+    // Total diff stats for overview
+    const totalDels = diffs.reduce((s, d) => s + d.dels, 0);
+    const totalAdds = diffs.reduce((s, d) => s + d.adds, 0);
+
+    // Build tabs — overview first, then individual diffs
     let tabsHtml = '<div class="diff-tabs">';
+    // Overview tab (active by default)
+    tabsHtml += '<button class="diff-tab active" data-idx="overview" onclick="switchTab(\'overview\')">';
+    tabsHtml += '📊 总览';
+    tabsHtml += '<span class="tab-badge has-diff">' + newVersions.length + ' 个新版</span>';
+    tabsHtml += '</button>';
     for (let i = 0; i < diffs.length; i++) {
       const d = diffs[i];
       const hasDiff = d.adds > 0 || d.dels > 0;
       const badgeClass = hasDiff ? 'has-diff' : 'no-diff';
       const badgeText = hasDiff ? (d.dels + d.adds) + ' 处差异' : '无差异';
-      tabsHtml += '<button class="diff-tab' + (i === 0 ? ' active' : '') + '" data-idx="' + i + '" onclick="switchTab(' + i + ')">';
+      tabsHtml += '<button class="diff-tab" data-idx="' + i + '" onclick="switchTab(' + i + ')">';
       tabsHtml += '旧版 vs 新版' + (i + 1);
       tabsHtml += '<span class="tab-badge ' + badgeClass + '">' + badgeText + '</span>';
       tabsHtml += '</button>';
@@ -872,11 +1134,15 @@ function showMultiDiff(versions) {
     tabsHtml += '</div>';
     document.getElementById('diff-tabs-container').innerHTML = tabsHtml;
 
-    // Build panels
+    // Build panels — overview panel first
     let panelsHtml = '';
+    panelsHtml += '<div class="diff-panel active" data-idx="overview">';
+    panelsHtml += renderOverview(unifiedRows, newVersions.length);
+    panelsHtml += '</div>';
+
     for (let i = 0; i < diffs.length; i++) {
       const d = diffs[i];
-      panelsHtml += '<div class="diff-panel' + (i === 0 ? ' active' : '') + '" data-idx="' + i + '">';
+      panelsHtml += '<div class="diff-panel" data-idx="' + i + '">';
       if (d.adds === 0 && d.dels === 0) {
         panelsHtml += '<div class="sbs-container"><div class="no-diff"><div class="big">✅</div>两版内容完全相同，无差异。</div></div>';
       } else {
@@ -886,8 +1152,8 @@ function showMultiDiff(versions) {
     }
     document.getElementById('diff-panels-container').innerHTML = panelsHtml;
 
-    // Show stats for first tab
-    updateStats(diffs[0].dels, diffs[0].adds, diffs[0].eqs);
+    // Show stats for overview tab
+    updateStats(totalDels, totalAdds, diffs[0].eqs, true);
   }
 
   // Store diffs for tab switching
@@ -900,25 +1166,35 @@ function showMultiDiff(versions) {
 }
 
 function switchTab(idx) {
+  // idx can be 'overview' or a number
+  const idxStr = String(idx);
   // Update tab active state
   document.querySelectorAll('.diff-tab').forEach(t => {
-    t.classList.toggle('active', parseInt(t.dataset.idx) === idx);
+    t.classList.toggle('active', t.dataset.idx === idxStr);
   });
   // Update panel visibility
   document.querySelectorAll('.diff-panel').forEach(p => {
-    p.classList.toggle('active', parseInt(p.dataset.idx) === idx);
+    p.classList.toggle('active', p.dataset.idx === idxStr);
   });
   // Update stats
-  if (window._allDiffs && window._allDiffs[idx]) {
-    const d = window._allDiffs[idx];
-    updateStats(d.dels, d.adds, d.eqs);
+  if (idxStr === 'overview') {
+    if (window._allDiffs) {
+      const totalDels = window._allDiffs.reduce((s, d) => s + d.dels, 0);
+      const totalAdds = window._allDiffs.reduce((s, d) => s + d.adds, 0);
+      const baseEqs = window._allDiffs[0] ? window._allDiffs[0].eqs : 0;
+      updateStats(totalDels, totalAdds, baseEqs, true);
+    }
+  } else if (window._allDiffs && window._allDiffs[parseInt(idxStr)]) {
+    const d = window._allDiffs[parseInt(idxStr)];
+    updateStats(d.dels, d.adds, d.eqs, false);
   }
 }
 
-function updateStats(dels, adds, eqs) {
+function updateStats(dels, adds, eqs, isOverview) {
   const statsEl = document.getElementById('stats');
+  const prefix = isOverview ? '(合计) ' : '';
   statsEl.innerHTML =
-    '<span><span class="dot del"></span>' + dels + ' 行删除</span>' +
+    '<span>' + prefix + '<span class="dot del"></span>' + dels + ' 行删除</span>' +
     '<span><span class="dot add"></span>' + adds + ' 行新增</span>' +
     '<span><span class="dot eq"></span>' + eqs + ' 行相同</span>';
 }
@@ -1204,6 +1480,17 @@ function showToast(msg) {
 
 function init() {
   const params = new URLSearchParams(window.location.search);
+
+  // Test mode for overview
+  if (params.get('test') === 'overview') {
+    const oldText = '# 标题\n\n这是第一段内容，旧版的描述。\n\n## 第二节\n\n这里有一些细节说明。\n\n### 第三节\n\n最后的结尾段落。';
+    const new1 = '# 标题\n\n这是第一段内容，新版1修改了描述。\n\n## 第二节\n\n这里有一些细节说明，并新增了补充。\n\n### 第三节\n\n最后的结尾段落。';
+    const new2 = '# 标题\n\n这是第一段内容，旧版的描述。\n\n## 第二节（重命名）\n\n这里完全重写了内容。\n\n新增了一个段落。\n\n### 第三节\n\n结尾段落改了。';
+    const new3 = '# 新标题\n\n这是第一段内容，新版3大幅修改。\n\n## 第二节\n\n这里有一些细节说明。\n\n### 第三节\n\n最后的结尾段落，加了一句话。';
+    showMultiDiff([oldText, new1, new2, new3]);
+    return;
+  }
+
   const oldText = params.get('old');
   const newText = params.get('new');
 
