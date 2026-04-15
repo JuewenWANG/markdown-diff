@@ -956,28 +956,44 @@ function parsePaste(text) {
 
   // === Strategy 2: Row-aligned tabs → reconstruct columns ===
   // Each content line has N tabs → N+1 columns; blank lines may have 0 or N tabs
+  // Use "majority vote" for expected tab count to handle edge cases
   const contentLines = lines.filter(l => l.trim() !== '');
   if (contentLines.length > 0) {
     const tabCounts = contentLines.map(l => (l.match(/\t/g) || []).length);
-    const expectedTabs = tabCounts[0];
-    if (expectedTabs >= 1 && expectedTabs <= 3) {
-      const consistent = tabCounts.every(tc => tc === expectedTabs);
-      if (consistent) {
-        const numCols = expectedTabs + 1;
-        const cols = Array.from({length: numCols}, () => []);
-        for (const line of lines) {
-          if (line.trim() === '') {
-            // Blank line: add empty to every column to preserve paragraph breaks
-            for (let c = 0; c < numCols; c++) cols[c].push('');
+    // Find the most common tab count (mode)
+    const freq = {};
+    for (const tc of tabCounts) { freq[tc] = (freq[tc] || 0) + 1; }
+    let expectedTabs = 0, maxFreq = 0;
+    for (const [tc, f] of Object.entries(freq)) {
+      if (f > maxFreq && parseInt(tc) >= 1) { maxFreq = f; expectedTabs = parseInt(tc); }
+    }
+    if (expectedTabs >= 1 && expectedTabs <= 3 && maxFreq >= contentLines.length * 0.5) {
+      const numCols = expectedTabs + 1;
+      const cols = Array.from({length: numCols}, () => []);
+      for (const line of lines) {
+        if (line.trim() === '') {
+          // Blank line: add empty to every column to preserve paragraph breaks
+          for (let c = 0; c < numCols; c++) cols[c].push('');
+        } else {
+          const lineTabCount = (line.match(/\t/g) || []).length;
+          if (lineTabCount === expectedTabs) {
+            // Normal line with correct number of tabs
+            const parts = line.split('\t');
+            for (let c = 0; c < numCols; c++) cols[c].push(parts[c] || '');
+          } else if (lineTabCount === 0) {
+            // Line with no tabs — likely content belonging to first column
+            cols[0].push(line);
+            for (let c = 1; c < numCols; c++) cols[c].push('');
           } else {
+            // Mismatched tabs — split and pad/truncate to numCols
             const parts = line.split('\t');
             for (let c = 0; c < numCols; c++) cols[c].push(parts[c] || '');
           }
         }
-        const versions = cols.map(c => c.join('\n').replace(/\n+$/, '').replace(/^\n+/, ''));
-        if (versions.some(v => v.trim() !== '')) {
-          return { versions };
-        }
+      }
+      const versions = cols.map(c => c.join('\n').replace(/\n+$/, '').replace(/^\n+/, ''));
+      if (versions.some(v => v.trim() !== '')) {
+        return { versions };
       }
     }
   }
@@ -1094,7 +1110,23 @@ document.addEventListener('paste', function(e) {
     return;
   }
 
+  // Log clipboard diagnostics to console
+  const tabCount = (text.match(/\t/g) || []).length;
+  const nlCount = (text.match(/\n/g) || []).length;
+  const quoteCount = (text.match(/"/g) || []).length;
+  console.log('=== Paste Event ===');
+  console.log('Text length:', text.length, '| Tabs:', tabCount, '| Newlines:', nlCount, '| Quotes:', quoteCount);
+  console.log('First 200 chars (JSON):', JSON.stringify(text.substring(0, 200)));
+  console.log('parseQuotedCells:', parseQuotedCells(text));
+
   const parsed = parsePaste(text);
+  console.log('parsePaste result:', parsed ? parsed.versions.length + ' versions' : 'null');
+  if (parsed && parsed.versions) {
+    parsed.versions.forEach(function(v, i) {
+      console.log('  v' + i + ' (' + v.length + ' chars, ' + v.split('\n').length + ' lines): ' + JSON.stringify(v.substring(0, 80)));
+    });
+  }
+
   if (parsed && parsed.versions) {
     const v = parsed.versions;
     showMultiDiff(v);
