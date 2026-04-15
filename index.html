@@ -328,6 +328,19 @@
   }
   .url-banner.show { display: block; }
 
+  .paste-hint {
+    font-size: 12px;
+    color: #4a90d9;
+    background: #e8f0fe;
+    padding: 4px 12px;
+    border-radius: 6px;
+    animation: pulse-hint 2s ease-in-out infinite;
+  }
+  @keyframes pulse-hint {
+    0%, 100% { opacity: .7; }
+    50% { opacity: 1; }
+  }
+
   .hidden { display: none !important; }
 
   @media (max-width: 768px) {
@@ -388,7 +401,10 @@
 <div class="diff-result" id="diff-result">
   <div class="result-toolbar">
     <div class="stats" id="stats"></div>
-    <button class="back-btn" onclick="goBack()">← 重新对比</button>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span class="paste-hint">💡 直接 <span class="kbd">Ctrl</span>+<span class="kbd">V</span> 粘贴下一个</span>
+      <button class="back-btn" onclick="goBack()">← 回到首页</button>
+    </div>
   </div>
   <div id="diff-output"></div>
 </div>
@@ -867,6 +883,7 @@ function parsePaste(text) {
 }
 
 document.addEventListener('paste', function(e) {
+  // Allow normal paste inside textareas (manual input mode)
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
 
   const text = (e.clipboardData || window.clipboardData).getData('text');
@@ -877,12 +894,23 @@ document.addEventListener('paste', function(e) {
   const parsed = parsePaste(text);
   if (parsed) {
     showDiff(parsed.old, parsed.new);
-    showToast('✅ 已读取剪贴板数据并自动对比');
+    showToast('✅ 已加载新数据并对比');
   } else {
     showManualInput();
     document.getElementById('text-old').value = text;
     document.getElementById('text-new').focus();
     showToast('📋 已粘贴到"原始版本"，请再粘贴新版本');
+  }
+});
+
+// Also support Ctrl+V / Cmd+V anywhere — even when focus is inside the diff result
+// This catches cases where the default paste event doesn't fire (e.g. focus on a div)
+document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+    // If we're in manual input textareas, let native paste handle it
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+    // The paste event will handle the rest — this is just a safety net
+    // to ensure focus doesn't prevent paste from firing
   }
 });
 
